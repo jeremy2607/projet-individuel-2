@@ -59,6 +59,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Préparer le .env (CI, mot de passe jetable)
+        run: echo "MYSQL_ROOT_PASSWORD=ynovpwd" > .env
+
       - name: Démarrer la stack Docker
         run: docker compose up --build -d
 
