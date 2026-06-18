@@ -1,0 +1,23 @@
+# secrets
+.env
+
+# node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# cypress artefacts
+frontend/cypress/screenshots/
+frontend/cypress/videos/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+coverage.xml
+
+# divers
+*.log
+.DS_Store
+.vercel

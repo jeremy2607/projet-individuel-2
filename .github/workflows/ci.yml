@@ -1,0 +1,170 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------- 1. Tests back : UT + IT + couverture ----------
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:9.3
+        env:
+          MYSQL_ROOT_PASSWORD: ynovpwd
+          MYSQL_DATABASE: ynov_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -pynovpwd"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Appliquer les migrations SQL
+        run: |
+          docker run --rm --network host -v "$PWD/sqlfiles:/sql" mysql:9.3 \
+            sh -c 'until mysqladmin ping -h127.0.0.1 -uroot -pynovpwd --silent; do sleep 2; done; \
+                   cat /sql/migration-*.sql | mysql -h127.0.0.1 -uroot -pynovpwd'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer les dépendances
+        run: pip install -r api/requirements.txt -r api/requirements-dev.txt
+
+      - name: Tests pytest + couverture
+        working-directory: api
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: ynovpwd
+          DB_NAME: ynov_ci
+        run: pytest --cov=server --cov-report=xml --cov-report=term-missing
+
+      - name: Upload couverture vers Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: api/coverage.xml
+
+  # ---------- 2. Infra + e2e (stack Docker complète) ----------
+  e2e-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Démarrer la stack Docker
+        run: docker compose up --build -d
+
+      - name: Attendre que la stack réponde
+        run: |
+          for i in $(seq 1 40); do
+            curl -sf http://localhost:8081/api/users && break
+            sleep 3
+          done
+
+      - name: Tests d'infrastructure
+        run: ./infra-test.sh
+
+      - name: Tests e2e Cypress
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: frontend
+        env:
+          CYPRESS_BASE_URL: http://localhost:8081
+
+      - name: Logs en cas d'échec
+        if: failure()
+        run: docker compose logs
+
+  # ---------- 3. Build & push des images sur Docker Hub ----------
+  docker-images:
+    needs: [backend-tests, e2e-tests]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Image backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./api
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ynov-ci-backend:latest
+
+      - name: Image frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ynov-ci-frontend:latest
+          build-args: |
+            VITE_API_URL=${{ vars.VITE_API_URL }}
+
+      - name: Image db
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ynov-ci-db:latest
+
+  # ---------- 4. Déploiement du back sur Vercel ----------
+  deploy-vercel:
+    needs: docker-images
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer Vercel CLI
+        run: npm i -g vercel
+      - name: Déployer (depuis api/)
+        working-directory: api
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+  # ---------- 5. Déploiement du front sur GitHub Pages ----------
+  deploy-pages:
+    needs: docker-images
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build du front (pointant vers l'API prod)
+        working-directory: frontend
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_BASE: ${{ vars.VITE_BASE }}
+        run: |
+          npm ci
+          npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
