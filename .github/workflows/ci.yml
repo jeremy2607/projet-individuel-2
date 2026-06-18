@@ -2,9 +2,9 @@ name: CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   # ---------- 1. Tests back : UT + IT + couverture ----------
@@ -86,7 +86,7 @@ jobs:
   # ---------- 3. Build & push des images sur Docker Hub ----------
   docker-images:
     needs: [backend-tests, e2e-tests]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -122,7 +122,7 @@ jobs:
   # ---------- 4. Déploiement du back sur Vercel ----------
   deploy-vercel:
     needs: docker-images
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -141,7 +141,7 @@ jobs:
   # ---------- 5. Déploiement du front sur GitHub Pages ----------
   deploy-pages:
     needs: docker-images
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:
       pages: write
