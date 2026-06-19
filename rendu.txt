@@ -1,12 +1,11 @@
 PROJET INDIVIDUEL 2 — Architecture Docker MySQL / Adminer / Python / React + CI/CD
 
-À compléter une fois les déploiements en ligne :
-
-- Repository GitHub          : https://github.com/<user>/<repo>
-- Frontend (GitHub Pages)    : https://<user>.github.io/<repo>/
-- Backend (Vercel)           : https://<projet>.vercel.app
+- Repository GitHub          : https://github.com/jeremy2607/projet-individuel-2
+- Frontend (GitHub Pages)    : https://jeremy2607.github.io/projet-individuel-2/
+- Backend (Vercel)           : https://projet-individuel-2.vercel.app
 - Image Docker frontend      : https://hub.docker.com/r/jeremyp26/ynov-ci-frontend
 - Image Docker backend       : https://hub.docker.com/r/jeremyp26/ynov-ci-backend
-- Codecov                    : https://app.codecov.io/gh/<user>/<repo>
+- Codecov                    : https://app.codecov.io/gh/jeremy2607/projet-individuel-2
 
-Admin (seedé au fresh init) : loise.fenoll@ynov.com
+Admin (seedé au fresh init) : loise.fenoll@ynov.com / PvdrTAzTeR247sDnAZBr
+Base de prod                 : MySQL sur alwaysdata (mysql-jeremyp26.alwaysdata.net)
